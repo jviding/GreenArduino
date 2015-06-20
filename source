@@ -1,0 +1,102 @@
+#include <Wire.h>
+#include "TSL2561.h"
+#include <dht.h>
+
+TSL2561 tsl(TSL2561_ADDR_LOW);
+dht DHT;
+
+#define DHT22_PIN 14
+
+//lux
+uint32_t lum;
+uint16_t ir, full, lux;
+
+void setup(){
+  Serial.begin(4800);
+  // You can change the gain on the fly, to adapt to brighter/dimmer light situations
+  tsl.setGain(TSL2561_GAIN_0X); // set no gain (for bright situtations)
+  //tsl.setGain(TSL2561_GAIN_16X); // set 16x gain (for dim situations)
+  // Changing the integration time gives you a longer time over which to sense light
+  // longer timelines are slower, but are good in very low light situtations!
+  tsl.setTiming(TSL2561_INTEGRATIONTIME_13MS); // shortest integration time (bright light)
+  //tsl.setTiming(TSL2561_INTEGRATIONTIME_101MS); // medium integration time (medium light)
+  //tsl.setTiming(TSL2561_INTEGRATIONTIME_402MS); // longest integration time (dim light)
+  ir = 0;
+  full = 0;
+  lux = 0;
+}
+
+void loop(){
+  for (int i=0;i<2*60*5;i++) {
+    if (i%2==0) { // lux every 1 second, 0.25s after start
+      getSoundAndLux(3);
+      continue;
+    }
+    if ((i+5)%10==0) {
+      getSoundAndLux(1); // temp every 5 seconds, 2.75s after start
+      continue;
+    }
+    if (i==2*60*5-1) {
+      getSoundAndLux(2); // humid every 5 minutes (end of loop)
+      break;
+    }
+    getSoundAndLux(0); // sound every 0.5 seconds
+  }
+}
+
+void getSoundAndLux(int option) { //takes 0.5 seconds
+  int val = 0;
+  for (int a=0;a<4;a++) {
+    if (a==2 && option == 1) {
+      getTemp();
+    }
+    if (a==2 && option == 2) {
+      getHumid();
+    }
+    if (a==2 && option == 3) {
+      getLux(1);
+      lum = tsl.getFullLuminosity();
+    }
+    else if (a==2 && option != 3) {
+      getLux(0);
+      lum = tsl.getFullLuminosity();
+    }
+    val += analogRead(1);
+    delay(125);
+  }
+  Serial.print("s");
+  Serial.println(val/4);
+}
+
+void getTemp() {
+  int chk = DHT.read22(DHT22_PIN);
+  Serial.print("t");
+  Serial.println(DHT.temperature, 1);
+}
+
+void getHumid() {
+  int chk = DHT.read22(DHT22_PIN);
+  Serial.print("h");
+  Serial.println(DHT.humidity, 1);
+}
+
+void getLux(int option) {
+  // This can take 13-402 milliseconds!
+  //uint16_t x = tsl.getLuminosity(TSL2561_VISIBLE);
+  //uint16_t x = tsl.getLuminosity(TSL2561_FULLSPECTRUM);
+  //uint16_t x = tsl.getLuminosity(TSL2561_INFRARED);
+  ir += lum >> 16;
+  full += lum & 0xFFFF;
+  lux += tsl.calculateLux(full, ir);
+  if (option == 1) {
+    Serial.print("l");
+    Serial.print(ir/2);
+    Serial.print(" "); 
+    Serial.print(full/2);
+    Serial.print(" "); 
+    Serial.println(lux/2);
+    ir = 0;
+    full = 0;
+    lux = 0;
+  }
+}
